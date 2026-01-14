@@ -1,7 +1,21 @@
+from datetime import datetime
 from openai import OpenAI
 from VoceMod import * ## При неполном импорте посему-то не работает, конечно возможно что так только у меня 
-from VoceConnector import *
 
+
+
+file = open("Log.txt", "a", encoding="utf-8")
+
+file.write(f"{'='*20} НОВАЯ СЕССИЯ {'='*20}\n")
+file.flush()
+
+def log(message, role):
+    if message: 
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        file.write(f"[{timestamp}] {role}: {message}\n")
+        file.flush() 
+
+    
 
 ## Настройка клиента
 client = OpenAI(
@@ -10,7 +24,15 @@ client = OpenAI(
 )
 
 
-OnVoce = True ## Переменная отвечающая за то, будет ли ввод голосом или текстом. True - голосом, False - текстом
+OnVoce = False ## Переменная отвечающая за то, будет ли ввод голосом или текстом. True - голосом, False - текстом
+
+if OnVoce:
+    from VoceConnector import * ##(был перенесен, для быстрый проверки в случае выключеного голосового ввода)
+
+    print("--- Голосовой ввод активирован ---")
+else:
+    print("--- Работа в текстовом режиме (быстрый старт) ---")
+
 
 
 ##Системный промпт, который определяет личность и стиль общения бота, но я тут написал много всякой фигни, что бы модель понимала кто она такая и как ей общаться с юзером, но она всервано делает по своему, ну ничего страшного.
@@ -112,7 +134,9 @@ while True:
     
     memorybank.append({"role": "user", "content": user_input}) ##Тут кароче контекст переписки хранится в мемерибанке, а этот словарь нужен что бы передовать модели контекст
 
-
+    log(user_input, "user")
+    
+    
     try:
         completion = client.chat.completions.create(
             model = neyromodels.DOLPHIN, ##Тут вибираем мдель, у меня их 2, но 2-я получше, ну мне так кажется
@@ -125,10 +149,12 @@ while True:
 
         print(f"\nБот: {completion.choices[0].message.content}\n")
         memorybank.append({"role": "assistant", "content": completion.choices[0].message.content}) ##Тут кароче добавляем ответ модели в контекст переписки, что бы она не забывала о чем говорили раньше
+    
+        log(completion.choices[0].message.content, "assistant")
+    
         luna.say(completion.choices[0].message.content) ##Тут кароче Луна озвучивает ответ модели
 
 
 ##херня ниже нужна что бы трай не спамил ошибкой в консоль, если что то пойдет не так, ну точнее что бы воводил ошибку красиво.
     except Exception as e:
         print(f"Ошибка: {e}")
-    

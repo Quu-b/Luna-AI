@@ -17,7 +17,7 @@ model = Model(MODEL_PATH)
 rec = KaldiRecognizer(model, SAMPLE_RATE)
 
 
-
+ ##непроверенная функция для включения и отключения голосового ввода по кнопке "home"
 def toggle_mute():
     global muted
     
