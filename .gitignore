@@ -1,3 +1,7 @@
 .venv/
 __pycache__/
-vosk-model-ru-0.42/
+vosk-model-ru-0.42/ 
+*.txt
+*.db
+*.log
+.DS_Store

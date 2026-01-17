@@ -1,6 +1,11 @@
 from datetime import datetime
 from openai import OpenAI
-from VoceMod import * ## При неполном импорте посему-то не работает, конечно возможно что так только у меня 
+from AIVoce import * ## При неполном импорте посему-то не работает, конечно возможно что так только у меня 
+import sqlite3
+import re
+
+con = sqlite3.connect("LMemory.db")
+cur = con.cursor()
 
 
 
@@ -126,7 +131,9 @@ while True:
         print(f"Вы (голосом): {user_input}")
 
         ## я недавно узнал, что .lower() делает все буквы маленькими, вот так вот просто))) да!
-    if user_input.lower() in ['exit', 'q', 'выход']: ##Команда для выхода из чата
+    if user_input.lower() in ['exit', 'q', 'выход']:
+        file.close() # Закрываем текстовик
+        con.close()  # Закрываем базу данных
         break
     
     if not user_input or not user_input.strip(): ##Если юзер ничего не ввел.
