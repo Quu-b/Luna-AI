@@ -1,62 +1,70 @@
+from faster_whisper import WhisperModel
 from datetime import datetime
 from openai import OpenAI
 from AIVoce import * ## При неполном импорте посему-то не работает, конечно возможно что так только у меня 
 import sqlite3
+import copy ## словил ошибку контекста при сложной задаче, предложили изменять не оригенальный контекст а копию.
 import re
 
-db = sqlite3.connect("Memory.db") ##Соединение с базой данных
-cur = db.cursor() ##Курсор для выполнения SQL-запросов
-
-## Ниже создается таблица для хранения памяти нейросети, если она еще не существует
-cur.execute("""
-    CREATE TABLE IF NOT EXISTS memory(
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        timestamp TEXT NOT NULL, 
-        role TEXT NOT NULL, 
-        content TEXT NOT NULL 
-            )   
-""")
+## Это являет переосознанием моего старотового мейна, где я постараюсь расставить все красиво
 
 
+# ---- SQLite ---- #
+# Создаем инструменты для таблицы
+db = sqlite3.connect("memory.db")
+cur = db.cursor()
+
+# Создаем таблицу 
+cur.execute("""CREATE TABLE IF NOT EXISTS memory(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            time TEXT,
+            role TEXT,
+            memory TEXT
+            )""")
+ 
+db.commit() # Сохраняем 
+
+
+# ---- Логирование В Log.txt ---- #
 fileL = open("Log.txt", "a", encoding="utf-8")
-
 fileL.write(f"{'='*20} НОВАЯ СЕССИЯ {'='*20}\n")
 fileL.flush()
 
+## Функция логирования в файл
 def log(message, role):
-    if message:  ##тута мы пишем в файл лог, наши логи.
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if message and len(message.strip()) > 0:  ##тут мы пишем в файл логи.
         fileL.write(f"[{timestamp}] {role}: {message}\n")
         fileL.flush() 
 
-        ##Тут мы пишем в память нейросети, но уже в базу данных SQLite3, да, вот такой я умный)) (нет)
-        cur.execute("""
-            INSERT INTO memory (timestamp, role, content)
-            VALUES (?, ?, ?)
-        """, (timestamp, role, message))
+    
+    if message and len(message.strip()) > 0:
+        cur.execute("INSERT INTO memory (time, role, memory) VALUES (?, ?, ?)", (timestamp, role, message))
         db.commit()
-        ##Sqlite3 оказывается отдельный язык прогромаривания, я думал это фича питона, ну да ладно, я его не знаю, но учить буду, когда нибудь потом. Возможно.... ну а так, гайд от нейронки помог!
-
-## Настройка клиента
+# ---- Настройка клиента  ---- #
 client = OpenAI(
-    base_url="http://127.0.0.1:1234/v1", ##Это локальный адрес для LM Studio API
-    api_key="lm-studio" ##Это стандартный ключ для LM Studio API, менять не нужно
+    base_url = "http://127.0.0.1:1234/v1", ##Это локальный адрес для LM Studio API
+    api_key = "lm-studio" ##Это стандартный ключ для LM Studio API, менять не нужно
 )
 
 
-OnVoce = False ## Переменная отвечающая за то, будет ли ввод голосом или текстом. True - голосом, False - текстом
+#Включение\Выключение
+OnVoce = False 
 
 if OnVoce:
-    from VoceConnector import * ##(был перенесен, для быстрый проверки в случае выключеного голосового ввода)
-
+    from VoceCon import *
+    print("VoceChat - Включен")
+    
+    print("Загрузка 'Слуха' (Faster-Whisper) на CUDA...")
+    # Инициализируем модель модель кторая прослушивает нас
+    stt_model = WhisperModel("large-v3-turbo", device="cuda", compute_type="float16")
+    #"large-v3-turbo" можено поменять на "small", "medium", "large-v2" и т.д. в зависимости от мощности вашей видюхи и нужной точности. Флоат нежелаетельно менять, а куда - моя видео карта, точнее ядра ее.
     print("--- Голосовой ввод активирован ---")
 else:
-    print("--- Работа в текстовом режиме (быстрый старт) ---")
+    print("VoceChat - Выключен")
 
 
-
-
-##Хотел я в отдельный файл засунуть, да вот пайтон был об этом друго-го мнения
+# СИСТЕМНЫЙ ПРОМТ.  Возможно стоит уменьшить 
 sys_prompt = """
 Ты - виртуальная AI-персона, стример и VTuber.
 Ты общаешься живо, естественно и по-человечески, без канцелярита и без «я как ИИ». Ты знаешь много различных современных занятий, не боишься выражать свое мнение. ты должна говорить о себе в женском роде, но используй естественный русский язык.
@@ -113,131 +121,106 @@ sys_prompt = """
 Ты здесь, чтобы общаться и развлекать."""
 
 
-
+# НЕЙРОСЕТИ. 
 class neyromodels: ##на самом деле ниже соверщшенно бесполезная вещь, тут безразницы которую вибарать. Будет работать так, которая загружена в LM Studio, но я пишу для красоты))
-    DOLPHIN = "dolphin-2.9.4-llama3.1-8b"## Модель Dolphin 2.9.4 на базе Llama 3.1 с 8 миллиардами параметров, она нормальная, после тестов она даже стала моей основной моделью. Квен постоянно говорит на китайском, даже когда я ей запрещаю. 
-    QWEN    = "qwen2.5-7b-instruct-abliterated-v2"## Модель Qwen 2.5 с 7 миллиардами параметров, она неплохая, но иногда выдает китайский язык, даже когда я ей запрещаю, любит сочинять слова и тогдалее, до тестов она была лучше первой модели, но после обновления Dolphin она стала хуже.
+    DOLPHIN = "dolphin-2.9.4-llama3.1-8b"
+    ## Модель Dolphin 2.9.4 на базе Llama 3.1 с 8 миллиардами параметров, она нормальная, после тестов она даже стала моей основной моделью, до использования Mistral 
+    
+    QWEN    = "qwen2.5-7b-instruct-abliterated-v2"
+    ## Модель Qwen 2.5 с 7 миллиардами параметров, она неплохая, но иногда выдает китайский язык, даже когда я ей запрещаю, любит сочинять слова и тогдалее, до тестов она была лучше первой модели, но после обновления она стала хуже.
+    
     GEMMA   = "gemma-2-9b-it-abliterated" 
+    ## Неплохо, но делает гиганские отступы между сообщениями - раздражает.
+    
+    MISTRAL = "mistralai/mistral-nemo-instruct-2407" 
+    ## Неплохо себя показала, но любит повторяться, особенно когда тема закрыта.    
 
 
-##тут кароче ее контекст хранится, что бы она не забывала кто она такая и о чем с ней говорят, и что бы модель понимала что от нее хотят, и вообще так надо! или нет? хз))
+# настройка Silero
+print("Загрузка голосовой модели...")
+luna = TTS(speaker = speakers.XENIA) ##Создаем объект озвучки Луна с женским голосом Ксения
+print("Голосовая модель загружена!")
+
+
+
+
+# ---- РАБОТА НЕЙРОСЕТИ ---- #
+
 memorybank = [
     {"role": "system", "content": sys_prompt}
 ]
 
 
 
-### Блок озвучки ответа модели с помощью VoceMod (Silero TTS) ###
+## Функция для нормализации памяти, чтобы не превышать лимит сообщений
+def normalize_memory(bank, limit=71): # почему то когда я ставлю 20, при выходе за лимит, она удоляет 2 и возвращает 21 сообщение, а не 20, как должно быть, это вызывает ошибку 400
+    system = bank[0]  # Создаем переменную для системного сообщения, что бы оно всегда было первым
+    dialog = [
+        m for m in bank[1:] # Берем каждое сообщение из памяти
+        if m["role"] in ("user", "assistant") # Если всё ок, кладем в новый список
+    ]
+    return [system] + dialog[-limit:] # Возвращаем системное сообщение + последние limit сообщений
 
-print("Загрузка голосовой модели...")
-luna = TTS(speaker = speakers.XENIA) ##Создаем объект озвучки Луна с женским голосом Ксения
-print("Голосовая модель загружена!")
+# ------ ОСНОВНОЙ ЦИКЛ ------ #
 
-### Блок озвучки ответа модели с помощью VoceMod (Silero TTS) Закончился###
-
-
-
-###ну кароче, день 6-7 у меня закончились знания по базе Sqlite. теперь Гемени помогает намного больше, ну надо хотя бы проект то закончить
-
-
-
-def search_memory(query):
-    # Убираем лишние знаки, чтобы поиск был чище
-    clean_query = re.sub(r'[^\w\s]', '', query).lower()
-    words = clean_query.split()
-    
-    if not words:
-        return ""
-
-    # Формируем SQL запрос: ищем каждое слово из вопроса в контенте базы
-    # Например: SELECT * FROM memory WHERE content LIKE '%погода%' OR content LIKE '%день%'
-    sql_search = " OR ".join([f"content LIKE ?" for _ in words])
-    params = [f"%{word}%" for word in words]
-    
-    cur.execute(f"SELECT role, content FROM memory WHERE {sql_search} ORDER BY id DESC LIMIT 5", params)
-    finds = cur.fetchall()
-    
-    if finds:
-        res = "\n--- Найденные совпадения из прошлого ---\n"
-        for f in reversed(finds):
-            res += f"{f[0]}: {f[1]}\n"
-        return res
-    return ""
-
-
-
-
-print("--- Чат запущен! Напиши 'exit'/'выход'/'q' для выхода ---")
 while True:
 
-
-    cur.execute("SELECT role, content FROM memory ORDER BY id DESC LIMIT 20")
-    rows = cur.fetchall() ## Получаем список строк из базы
-    rows.reverse() ## Обратный порядок для правильной последовательности сообщений
-    db_history = ""
-    for row in rows:
-        db_history += f"{row[0]}: {row[1]}\n"
-
-
-    if not OnVoce: ##Если ввод текстом
+    if not OnVoce:
         user_input = input("Вы: ")
-
-    else:
-        user_input = listen() ##Функция из VoceConnector.py которая слушает микрофон и возвращает распознанный текст
-        if not user_input or len(user_input.strip()) < 2: ##Если юзер ничего не сказал или сказал слишком мало
+    else: ## кароче, снизу мы виризаем паузы (чаще всего все нормально, но может пригодится) (.strip) и слушаем функцию из VoceCon
+        user_input = listen(stt_model)
+        if not user_input or len(user_input.strip()) < 2:
             continue
-        
-        print(f"Вы (голосом): {user_input}")
+        print(f"(Voce) Вы: {user_input}" )
 
-        ## я недавно узнал, что .lower() делает все буквы маленькими, вот так вот просто))) да!
-    if user_input.lower() in ['exit', 'q', 'выход']:
-        fileL.close() ## Закрываем текстовик
-        db.close() ## Закрываем базу данных
+
+
+    if user_input.lower() in ['q', 'exit', 'выход']: ## выход мз программы.
+        fileL.close()
+        print("Base and Logs Close, можно отправлятся на покой")
         break
-    
-    if not user_input or not user_input.strip(): ##Если юзер ничего не ввел.
-     continue
-    
-    memorybank.append({"role": "user", "content": user_input}) ##Тут кароче контекст переписки хранится в мемерибанке, а этот словарь нужен что бы передовать модели контекст
 
+
+    if memorybank[-1]["role"] == "user":
+        memorybank[-1]["content"] = user_input
+    else:
+        memorybank.append({"role": "user", "content": user_input})  
+    
+    # Кароче тут мы логируем вопрос юзера и добавляем его в контекст переписки
     log(user_input, "user")
-    
-    
+
+
+
+    messages_to_send = normalize_memory(memorybank) ## Нормализуем память, что бы не превышать лимит сообщений.
+    messages_to_send = copy.deepcopy(messages_to_send) ## Копируем контекст, что бы не изменять оригинальный, а то он сходит с ума при сложных задачах, выдавая ошибку API.
+
+
+
     try:
-
-        relevant_past = search_memory(user_input)
-        current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-        
-
-        if len(memorybank) > 11:
-            memorybank = [memorybank[0]] + memorybank[-10:] ##Если сообщений больше 10, то оставляем только последние 10 + системное сообщение, что бы не перегружать модель, а то там выйдет не пик-ми-герл, а татаро-ман-герл
-
-        messages_to_send = [
-            {"role": "system", "content": sys_prompt},
-            {"role": "system", "content": f"Время: {current_time}. Твои старые записи по теме:\n{relevant_past}\nПоследние логи:\n{db_history}"}
-        ] + memorybank[1:] ##Тут кароче мы добавляем в начало контекста текущее время, что бы модель не путалась во времени, а то она может забыть что сейчас день, а не ночь, или наоборот. И будт ночная татаро-ман-герл)))
-
-
+        # тут мы настраиваем запрос к модели, ниже я подписал что к чему))
         completion = client.chat.completions.create(
-            model = neyromodels.GEMMA, ##Тут вибираем мдель, у меня их 2, но 2-я получше, ну мне так кажется
+            model = neyromodels.MISTRAL, ##Тут вибираем мoдель, у меня их несколько.
             messages = messages_to_send, ##тут кароче передаем модели контекст из меморибанка + вопрос юзера, да
-            temperature=0.7, ##Это кароче настройка ее креативности, чем выше тем более креативные ответы, но это не всегда хорошо))), пс 0.8+ постаянно вываливает китайский язык, даже когда я ей запретил.
-            max_tokens=300, ##Определяет размер текста, к сожалению даже на моей видюхе она со временем сходит с ума
-            extra_body={
-                "stop": ["<|im_end|>", "Вы:", "user:"], ##Это кароче что бы не писала системную часть в ответе, а оставляла только ответ. 
-            }
+            temperature=0.65, ##Это кароче настройка ее креативности, чем выше тем более креативные ответы, но это не всегда хорошо)))
+            max_tokens=500, ##Определяет размер текста, к сожалению даже на моей видюхе она со временем сходит с ума
         )
 
-        print(f"\nБот: {completion.choices[0].message.content}\n")
-        memorybank.append({"role": "assistant", "content": completion.choices[0].message.content}) ##Тут кароче добавляем ответ модели в контекст переписки, что бы она не забывала о чем говорили раньше
-    
-        log(completion.choices[0].message.content, "assistant")
-    
-        luna.say(completion.choices[0].message.content) ##Тут кароче Луна озвучивает ответ модели
+        aswer = completion.choices[0].message.content
+        ct = datetime.now().strftime("%H:%M:%S")
+        if not aswer or len(aswer.strip()) < 1 or "Question:" in aswer:
+            print("!!! Луна молчит, пробуем еще раз или пропускаем...")
+            continue
 
+        print(f"\nLuna AI: {aswer}\n")
+        memorybank.append({"role": "assistant", "content": aswer}) ##Тут кароче добавляем ответ модели в контекст переписки, что бы она не забывала о чем говорили раньше
 
-##херня ниже нужна что бы трай не спамил ошибкой в консоль, если что то пойдет не так, ну точнее что бы воводил ошибку красиво.
+# тут мы логируем ответ и озвучиваем его
+        log(aswer, "assistant")
+        luna.say(aswer)
+
+# тут мы ловим ошибку API, если что-то пошло не так
     except Exception as e:
-        print(f"Ошибка: {e}")
-db.commit()
-db.close()
+        print(f"Ошибка API: {e}")
+        if memorybank[-1]["role"] == "user":
+            memorybank.pop()
+        continue    
