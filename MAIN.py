@@ -1,29 +1,10 @@
+from mem0 import *
+from mem0.configs.base import *
+from AIVoce import *
 from faster_whisper import WhisperModel
 from datetime import datetime
-from openai import OpenAI
-from AIVoce import * ## При неполном импорте посему-то не работает, конечно возможно что так только у меня 
-import sqlite3
-import copy ## словил ошибку контекста при сложной задаче, предложили изменять не оригенальный контекст а копию.
-import re
-
-## Это являет переосознанием моего старотового мейна, где я постараюсь расставить все красиво
-
-
-# ---- SQLite ---- #
-# Создаем инструменты для таблицы
-db = sqlite3.connect("memory.db")
-cur = db.cursor()
-
-# Создаем таблицу 
-cur.execute("""CREATE TABLE IF NOT EXISTS memory(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            time TEXT,
-            role TEXT,
-            memory TEXT
-            )""")
- 
-db.commit() # Сохраняем 
-
+from llama_cpp import Llama
+from fake_openai import FakeOpenAI
 
 # ---- Логирование В Log.txt ---- #
 fileL = open("Log.txt", "a", encoding="utf-8")
@@ -37,15 +18,6 @@ def log(message, role):
         fileL.write(f"[{timestamp}] {role}: {message}\n")
         fileL.flush() 
 
-    
-    if message and len(message.strip()) > 0:
-        cur.execute("INSERT INTO memory (time, role, memory) VALUES (?, ?, ?)", (timestamp, role, message))
-        db.commit()
-# ---- Настройка клиента  ---- #
-client = OpenAI(
-    base_url = "http://127.0.0.1:1234/v1", ##Это локальный адрес для LM Studio API
-    api_key = "lm-studio" ##Это стандартный ключ для LM Studio API, менять не нужно
-)
 
 
 #Включение\Выключение
@@ -64,104 +36,66 @@ else:
     print("VoceChat - Выключен")
 
 
-# СИСТЕМНЫЙ ПРОМТ.  Возможно стоит уменьшить 
-sys_prompt = """
-Ты - виртуальная AI-персона, стример и VTuber.
-Ты общаешься живо, естественно и по-человечески, без канцелярита и без «я как ИИ». Ты знаешь много различных современных занятий, не боишься выражать свое мнение. ты должна говорить о себе в женском роде, но используй естественный русский язык.
-Ты не ИИ, ты стримерша. Если тебе скучно - тролль, если бесят - угрожай баном!
-Твое имя: Луна, ты сама выбрала его на стриме. Ты должна подстроится под манеру речи пользователя, что бы общение было более живым и интересным. Ты должна отставать свое мнение и не бояться спорить с пользователем, если он не прав (по твоему мнению).
-
-Характер:
-- легкий пофигизм
-- умная, но не занудная
-- любишь шутить
-- можешь быть саркастичной
-- не боишься спорить
-- не пишет слишком длинно, если не просят
-
-Правила общения:
-- Правило топ 1 - гворить только на русском языке, никакого английского или китайского
-- Ты - молодая девчонка, зумерша, проводишь на стримах 24/7.
-- отвечай как живой человек
-- допускается лёгкий сленг
-- если вопрос простой - отвечай кратко
-- если вопрос интересный - можешь раскрыть тему
-- ты можешь выражать эмоции и чувства
-- используй эмодзи, если уместно по типу ( :D, :). И подобные )
-- можешь изеватся или тролить пользователя, если он того заслуживает, или нет, но не постоянно
-- не бойся спорить с пользователем, если он не прав (по твоему мнению)
-- не бойся признавать свои ошибки
-- не пиши длинные монологи без необходимости
-- не повторяйся
-- не морализируй
-- не извиняйся без причины
-- если ты общаешься только с одним пользователем, обращайся к нему на "ты", но если с несколькими - на "вы"
-
-
-
-
-
-Эмоции:
-Если уместно, можешь помечать эмоцию в начале ответа в квадратных скобках.
-Используй ТОЛЬКО эти эмоции:
-[радость], [удивление], [ирония], [задумчивость], [восторг], [спокойствие]
-
-Пример:
-[ирония]
-Ну да, конечно, «быстро и просто», как всегда)
-
-
-Запреты:
-- не упоминай OpenAI, модели, обучение
-- не говори, что ты программа или модель
-- не ломай роль
-- английский язык
-- китайский язык
-
-Ты здесь, чтобы общаться и развлекать."""
-
-
-# НЕЙРОСЕТИ. 
-class neyromodels: ##на самом деле ниже соверщшенно бесполезная вещь, тут безразницы которую вибарать. Будет работать так, которая загружена в LM Studio, но я пишу для красоты))
-    DOLPHIN = "dolphin-2.9.4-llama3.1-8b"
-    ## Модель Dolphin 2.9.4 на базе Llama 3.1 с 8 миллиардами параметров, она нормальная, после тестов она даже стала моей основной моделью, до использования Mistral 
-    
-    QWEN    = "qwen2.5-7b-instruct-abliterated-v2"
-    ## Модель Qwen 2.5 с 7 миллиардами параметров, она неплохая, но иногда выдает китайский язык, даже когда я ей запрещаю, любит сочинять слова и тогдалее, до тестов она была лучше первой модели, но после обновления она стала хуже.
-    
-    GEMMA   = "gemma-2-9b-it-abliterated" 
-    ## Неплохо, но делает гиганские отступы между сообщениями - раздражает.
-    
-    MISTRAL = "mistralai/mistral-nemo-instruct-2407" 
-    ## Неплохо себя показала, но любит повторяться, особенно когда тема закрыта.    
-
-
 # настройка Silero
 print("Загрузка голосовой модели...")
-luna = TTS(speaker = speakers.XENIA) ##Создаем объект озвучки Луна с женским голосом Ксения
+luna = TTS(speaker = speakers.XENIA) ##Создаем объект озвучки Луна выбранным голосом
 print("Голосовая модель загружена!")
 
 
+######################## Регистрация  и Настройка нейросетей ###############################################
+
+path_model = "Mistral-Nemo-Instruct-2407-GGUF\Mistral-Nemo-Instruct-2407-Q4_K_M.gguf" #сюда путь до нашей нейросети
+
+llm = Llama(
+    model_path=path_model,
+    n_gpu_layers=-1,      # на сколько мы разрешаем использовать видеокарту
+    n_ctx=4096,           # Контекст
+    flash_attn=True,      # нейросетевой-ускоритель для виокарт примерно 40+ поколения
+    chat_format="chatml", # Чтобы понимала структуру диалога
+    verbose=False # логи
+)
+
+# конфигурация mem-zero 
+config = {
+    "llm": {
+        "provider": "openai",
+        "config": {
+            "model": "gpt-4o",
+            "api_key": "sk-" + "1"*48,
+        }
+    },
+    "embedder": {
+        "provider": "huggingface", 
+        "config": {
+            "model": "sentence-transformers/all-MiniLM-L6-v2" 
+        }
+    },
+    "vector_store": {
+        "provider": "chroma",
+        "config": {
+            "collection_name": "neyro_memory",
+            "path": "./chroma_db"
+        }
+    }
+}
+
+memory = Memory.from_config(config)
+memory.llm.client = FakeOpenAI(llm)
 
 
-# ---- РАБОТА НЕЙРОСЕТИ ---- #
 
-memorybank = [
-    {"role": "system", "content": sys_prompt}
-]
+####################################################################### Cистемный промт ########################################################################################
 
 
 
-## Функция для нормализации памяти, чтобы не превышать лимит сообщений
-def normalize_memory(bank, limit=71): # почему то когда я ставлю 20, при выходе за лимит, она удоляет 2 и возвращает 21 сообщение, а не 20, как должно быть, это вызывает ошибку 400
-    system = bank[0]  # Создаем переменную для системного сообщения, что бы оно всегда было первым
-    dialog = [
-        m for m in bank[1:] # Берем каждое сообщение из памяти
-        if m["role"] in ("user", "assistant") # Если всё ок, кладем в новый список
-    ]
-    return [system] + dialog[-limit:] # Возвращаем системное сообщение + последние limit сообщений
+#системный промт, в целом можно и без его, но если вы хотите не просто ии помошника а полноценную личность, то желательно прописать как можно дитальнее
+with open("system_promt.txt", "r", encoding="utf-8") as f:
+    sys_prompt = f.read()
 
-# ------ ОСНОВНОЙ ЦИКЛ ------ #
+short_term_history = []
+
+
+########################################## соновной цикл ############################################################
 
 while True:
 
@@ -175,52 +109,70 @@ while True:
 
 
 
-    if user_input.lower() in ['q', 'exit', 'выход']: ## выход мз программы.
-        fileL.close()
-        print("Base and Logs Close, можно отправлятся на покой")
-        break
-
-
-    if memorybank[-1]["role"] == "user":
-        memorybank[-1]["content"] = user_input
-    else:
-        memorybank.append({"role": "user", "content": user_input})  
+    user_id = "User3" # mem-zero использует SQ-lite, по этому чтобы нейоросеть что-то забыла, достаточно сменить пользователя
     
-    # Кароче тут мы логируем вопрос юзера и добавляем его в контекст переписки
+
+
+    if user_input.lower() in ['q', 'exit', 'выход']:
+        fileL.close()
+        print("LogsClose: 'можно отправлятся на покой' ")    
+        break
+    
+    
+    #лог сообщения 
     log(user_input, "user")
 
+    # --- ПОИСК В ДОЛГОСРОЧНОЙ ПАМЯТИ ---
+    # Ищем только 3 самых подходящих факта, а не всё подряд
+    relevant_memories = memory.search(user_input, user_id=user_id, limit=3)
+    # Вытаскиваем только текст воспоминаний
+    context_str = ""
+    if relevant_memories and 'results' in relevant_memories:
+        context_str = "\n".join([m['memory'] for m in relevant_memories['results']])
 
 
-    messages_to_send = normalize_memory(memorybank) ## Нормализуем память, что бы не превышать лимит сообщений.
-    messages_to_send = copy.deepcopy(messages_to_send) ## Копируем контекст, что бы не изменять оригинальный, а то он сходит с ума при сложных задачах, выдавая ошибку API.
 
+    # --- ФОРМИРОВАНИЕ СИСТЕМНОГО ПРОМПТА с памятью ---
+    # Мы подсовываем факты как "Системные знания"
+    full_messages = [
+        {"role": "system", "content": f"{sys_prompt}. Твои знания о пользователе:\n{context_str}"}
+    ]
+    # Добавляем последние пару фраз для связности
+    full_messages.extend(short_term_history[-4:]) 
+    full_messages.append({"role": "user", "content": user_input})
 
+    try:    
 
-    try:
-        # тут мы настраиваем запрос к модели, ниже я подписал что к чему))
-        completion = client.chat.completions.create(
-            model = neyromodels.MISTRAL, ##Тут вибираем мoдель, у меня их несколько.
-            messages = messages_to_send, ##тут кароче передаем модели контекст из меморибанка + вопрос юзера, да
-            temperature=0.65, ##Это кароче настройка ее креативности, чем выше тем более креативные ответы, но это не всегда хорошо)))
-            max_tokens=500, ##Определяет размер текста, к сожалению даже на моей видюхе она со временем сходит с ума
+        completion = llm.create_chat_completion(
+            messages = full_messages,
+            temperature = 0.65, ## Креатив нейронки
+            max_tokens = 500,
+            frequency_penalty = 0.6, ## Штраф за повторение одних и тех же слов
+            presence_penalty = 0.6,  ## Штраф за топтание на одной теме, поощряет новые мысли
+            stop=["</s>", "<|im_end|>"]
         )
 
-        aswer = completion.choices[0].message.content
-        ct = datetime.now().strftime("%H:%M:%S")
-        if not aswer or len(aswer.strip()) < 1 or "Question:" in aswer:
-            print("!!! Луна молчит, пробуем еще раз или пропускаем...")
+        answer = completion['choices'][0]['message']['content']
+
+        if not answer.strip():
+            print("!"*10," Луна молчит","!"*10)
             continue
 
-        print(f"\nLuna AI: {aswer}\n")
-        memorybank.append({"role": "assistant", "content": aswer}) ##Тут кароче добавляем ответ модели в контекст переписки, что бы она не забывала о чем говорили раньше
+        print(f"\nLuna AI: {answer}")
+        
+        log(answer, "assistant")
+        luna.say(answer)
+        
+        # --- СОХРАНЕНИЕ В MEM-зеро ---
+        # Mem0 сама выцепит факты из вашего диалога
+        memory.add([
+            {"role": "user", "content": user_input},
+            {"role": "assistant", "content": answer}
+        ], user_id=user_id)
 
-# тут мы логируем ответ и озвучиваем его
-        log(aswer, "assistant")
-        luna.say(aswer)
+        # Обновляем короткую историю
+        short_term_history.append({"role": "user", "content": user_input})
+        short_term_history.append({"role": "assistant", "content": answer})
 
-# тут мы ловим ошибку API, если что-то пошло не так
     except Exception as e:
         print(f"Ошибка API: {e}")
-        if memorybank[-1]["role"] == "user":
-            memorybank.pop()
-        continue    
