@@ -3,8 +3,7 @@ from mem0.configs.base import *
 from AIVoce import *
 from faster_whisper import WhisperModel
 from datetime import datetime
-from llama_cpp import Llama
-from fake_openai import FakeOpenAI
+import ollama
 
 # ---- Логирование В Log.txt ---- #
 fileL = open("Log.txt", "a", encoding="utf-8")
@@ -28,11 +27,15 @@ if OnVoce:
     print("VoceChat - Включен")
     
     print("Загрузка 'Слуха' (Faster-Whisper) на CUDA...")
+    
     # Инициализируем модель модель кторая прослушивает нас
     stt_model = WhisperModel("large-v3-turbo", device="cuda", compute_type="float16")
     #"large-v3-turbo" можено поменять на "small", "medium", "large-v2" и т.д. в зависимости от мощности вашей видюхи и нужной точности. Флоат нежелаетельно менять, а куда - моя видео карта, точнее ядра ее.
+
     print("--- Голосовой ввод активирован ---")
+
 else:
+    
     print("VoceChat - Выключен")
 
 
@@ -44,24 +47,13 @@ print("Голосовая модель загружена!")
 
 ######################## Регистрация  и Настройка нейросетей ###############################################
 
-path_model = "Mistral-Nemo-Instruct-2407-GGUF\Mistral-Nemo-Instruct-2407-Q4_K_M.gguf" #сюда путь до нашей нейросети
-
-llm = Llama(
-    model_path=path_model,
-    n_gpu_layers=-1,      # на сколько мы разрешаем использовать видеокарту
-    n_ctx=4096,           # Контекст
-    flash_attn=True,      # нейросетевой-ускоритель для виокарт примерно 40+ поколения
-    chat_format="chatml", # Чтобы понимала структуру диалога
-    verbose=False # логи
-)
-
 # конфигурация mem-zero 
 config = {
     "llm": {
-        "provider": "openai",
+        "provider": "ollama",
         "config": {
-            "model": "gpt-4o",
-            "api_key": "sk-" + "1"*48,
+            "model": "mistral-nemo",
+            "ollama_base_url": "http://localhost:11434"
         }
     },
     "embedder": {
@@ -80,8 +72,24 @@ config = {
 }
 
 memory = Memory.from_config(config)
-memory.llm.client = FakeOpenAI(llm)
 
+
+print("Проверка связи с Ollama...")
+try:
+    # Пытаемся получить список моделей, чтобы понять, запущен ли сервер
+    models_info = ollama.list() # 
+    
+    # Проверяем, есть ли наша модель в списке скачанных
+    downloaded_models = [m.model for m in models_info.models]
+    if 'mistral-nemo:latest' not in downloaded_models and 'mistral-nemo' not in downloaded_models:
+        print(" Модель mistral-nemo не найдена! Начинаю скачивание...")
+        ollama.pull('mistral-nemo') # 
+        print(" Загрузка завершена.")
+    else:
+        print(" Модель готова к общению!")
+except Exception as e:
+    print(f" Ошибка: Ollama не запущена! Сначала запусти приложение Ollama. ({e})")
+    exit()
 
 
 ####################################################################### Cистемный промт ########################################################################################
@@ -95,13 +103,18 @@ with open("system_promt.txt", "r", encoding="utf-8") as f:
 short_term_history = []
 
 
+
+
+user_id = "User0" # mem-zero использует SQ-lite, по этому чтобы нейоросеть что-то забыла, достаточно сменить пользователя
+
+
 ########################################## соновной цикл ############################################################
 
 while True:
 
     if not OnVoce:
         user_input = input("Вы: ")
-    else: ## кароче, снизу мы виризаем паузы (чаще всего все нормально, но может пригодится) (.strip) и слушаем функцию из VoceCon
+    else: ## кароче, снизу мы выризаем паузы (чаще всего все нормально, но может пригодится) (.strip) и слушаем функцию из VoceCon
         user_input = listen(stt_model)
         if not user_input or len(user_input.strip()) < 2:
             continue
@@ -109,7 +122,7 @@ while True:
 
 
 
-    user_id = "User3" # mem-zero использует SQ-lite, по этому чтобы нейоросеть что-то забыла, достаточно сменить пользователя
+
     
 
 
@@ -124,35 +137,56 @@ while True:
 
     # --- ПОИСК В ДОЛГОСРОЧНОЙ ПАМЯТИ ---
     # Ищем только 3 самых подходящих факта, а не всё подряд
+
+
+
     relevant_memories = memory.search(user_input, user_id=user_id, limit=3)
+
     # Вытаскиваем только текст воспоминаний
     context_str = ""
-    if relevant_memories and 'results' in relevant_memories:
+    if isinstance(relevant_memories, list):
+        context_str = "\n".join([m['memory'] for m in relevant_memories if 'memory' in m])
+    elif isinstance(relevant_memories, dict) and 'results' in relevant_memories:
         context_str = "\n".join([m['memory'] for m in relevant_memories['results']])
+
+    print(f"DEBUG: Вспомнила факты: {context_str}")
 
 
 
     # --- ФОРМИРОВАНИЕ СИСТЕМНОГО ПРОМПТА с памятью ---
-    # Мы подсовываем факты как "Системные знания"
+    current_date = datetime.now().strftime("%d.%m.%Y")
+
+    mem_block = (
+        f"--- СЕГОДНЯШНЯЯ ДАТА: {current_date} ---\n"
+        "БЛОК ПАМЯТИ (твои скрытые знания о пользователе):\n"
+        f"{context_str}\n"
+        "ИСПОЛЬЗУЙ ЭТИ ФАКТЫ ТОЛЬКО ЕСЛИ ОНИ УМЕСТНЫ. НЕ ПЕРЕСКАЗЫВАЙ ИХ ДОСЛОВНО.\n"
+        "-------------------------------------------\n\n"
+    ) if context_str else ""
+
+
     full_messages = [
-        {"role": "system", "content": f"{sys_prompt}. Твои знания о пользователе:\n{context_str}"}
+        {"role": "system", "content": f"{mem_block}These are the system instructions:\n{sys_prompt}"}
     ]
+
     # Добавляем последние пару фраз для связности
     full_messages.extend(short_term_history[-4:]) 
     full_messages.append({"role": "user", "content": user_input})
 
     try:    
 
-        completion = llm.create_chat_completion(
-            messages = full_messages,
-            temperature = 0.65, ## Креатив нейронки
-            max_tokens = 500,
-            frequency_penalty = 0.6, ## Штраф за повторение одних и тех же слов
-            presence_penalty = 0.6,  ## Штраф за топтание на одной теме, поощряет новые мысли
-            stop=["</s>", "<|im_end|>"]
+        response = ollama.chat(
+            model='mistral-nemo',
+            messages=full_messages,
+            options={
+                'temperature': 0.55,
+                'num_predict': 450,
+                'stop': ["</s>", "<|im_end|>"]
+            }
         )
 
-        answer = completion['choices'][0]['message']['content']
+        answer = response['message']['content']
+
 
         if not answer.strip():
             print("!"*10," Луна молчит","!"*10)
@@ -160,15 +194,32 @@ while True:
 
         print(f"\nLuna AI: {answer}")
         
+
         log(answer, "assistant")
         luna.say(answer)
         
+
+
         # --- СОХРАНЕНИЕ В MEM-зеро ---
         # Mem0 сама выцепит факты из вашего диалога
-        memory.add([
-            {"role": "user", "content": user_input},
-            {"role": "assistant", "content": answer}
-        ], user_id=user_id)
+        current_time_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+        extraction_prompt = (
+            f"Сегодня: {current_time_str}. Извлеки ФАКТЫ о пользователе. "
+            "Игнорируй приветствия и общие вопросы. "
+            "Записывай только конкретику: Имя, увлечения, предпочтения, важные события. "
+            "Пример: '(23.02.2026) Имя пользователя: Админ'. Не обязательно это имя "
+            "Если новой важной информации нет — НИЧЕГО не пиши."
+        )
+
+        memory.add(
+            [
+                {"role": "user", "content": user_input},
+                {"role": "assistant", "content": answer}
+            ], 
+            user_id=user_id,
+            prompt=extraction_prompt
+        )
 
         # Обновляем короткую историю
         short_term_history.append({"role": "user", "content": user_input})
