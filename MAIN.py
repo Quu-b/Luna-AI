@@ -4,6 +4,9 @@ from AIVoce import *
 from faster_whisper import WhisperModel
 from datetime import datetime
 import ollama
+import locale
+# Установка часового пояса\языка
+locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
 
 # ---- Логирование В Log.txt ---- #
 fileL = open("Log.txt", "a", encoding="utf-8")
@@ -154,7 +157,7 @@ while True:
 
 
     # --- ФОРМИРОВАНИЕ СИСТЕМНОГО ПРОМПТА с памятью ---
-    current_date = datetime.now().strftime("%d.%m.%Y")
+    current_date = datetime.now().strftime("%A,%d.%m.%Y %H:%M")
 
     mem_block = (
         f"--- СЕГОДНЯШНЯЯ ДАТА: {current_date} ---\n"
@@ -170,7 +173,7 @@ while True:
     ]
 
     # Добавляем последние пару фраз для связности
-    full_messages.extend(short_term_history[-4:]) 
+    full_messages.extend(short_term_history[-14:]) 
     full_messages.append({"role": "user", "content": user_input})
 
     try:    
@@ -180,7 +183,7 @@ while True:
             messages=full_messages,
             options={
                 'temperature': 0.55,
-                'num_predict': 450,
+                'num_predict': 850,
                 'stop': ["</s>", "<|im_end|>"]
             }
         )
@@ -202,7 +205,7 @@ while True:
 
         # --- СОХРАНЕНИЕ В MEM-зеро ---
         # Mem0 сама выцепит факты из вашего диалога
-        current_time_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+        current_time_str = datetime.now().strftime("%A, %d.%m.%Y %H:%M")
 
         extraction_prompt = (
             f"Сегодня: {current_time_str}. Извлеки ФАКТЫ о пользователе. "
@@ -210,6 +213,7 @@ while True:
             "Записывай только конкретику: Имя, увлечения, предпочтения, важные события. "
             "Пример: '(23.02.2026) Имя пользователя: Админ'. Не обязательно это имя "
             "Если новой важной информации нет — НИЧЕГО не пиши."
+            "Когда ты запоминаешь факты, ОБЯЗАТЕЛЬНО записывай владельца этой фразы"
         )
 
         memory.add(
