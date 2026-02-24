@@ -17,15 +17,21 @@ echo Запуск скрипта пайтон.
 echo Версия пайтона:
 python --version
 
+
+:: Проверяем наличие внв
 if  not exist ".venv" (
 	echo [.venv] Не найден, создаю свой. . . .
 	python -m venv .venv
-
-	call .venv\Scripts\activate
-	pip install -r requirements.txt --quiet
-	pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 )
+
+:: Включаем .venv ( виртуальное окружение), проверяем наши библиотеки на их наличие
+call .venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+
 timeout /t 5 /nobreak
+cls
 
 call .venv\Scripts\activate
 python main.py
@@ -38,3 +44,5 @@ taskkill /f /im ollama.exe
 echo.
 echo Redy! Все закрыто, можно отдыхать ^_^
 pause
+
+:: Очень надеюсь что скрипт работает именно так, как я задумывал. (извините за неочень хорошую громатику, у меня по русскому 3 всегда было(  ))
