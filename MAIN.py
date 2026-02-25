@@ -5,6 +5,7 @@ from faster_whisper import WhisperModel
 from datetime import datetime
 import ollama
 import locale
+
 # Установка часового пояса\языка
 locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
 
@@ -22,7 +23,7 @@ def log(message, role):
 
 
 
-#Включение\Выключение
+#Включение\Выключение микрофона для голосового ввода. Если у вас мощная видюха и вы хотите общаться голосом, то включайте, если нет, то выключайте, чтобы не нагружать систему лишними задачами.
 OnVoce = False 
 
 if OnVoce:
@@ -55,14 +56,14 @@ config = {
     "llm": {
         "provider": "ollama",
         "config": {
-            "model": "mistral-nemo",
+            "model": "mistral-nemo", 
             "ollama_base_url": "http://localhost:11434"
         }
     },
     "embedder": {
-        "provider": "huggingface", 
+        "provider": "ollama", 
         "config": {
-            "model": "sentence-transformers/all-MiniLM-L6-v2" 
+            "model": "nomic-embed-text" 
         }
     },
     "vector_store": {
@@ -86,7 +87,7 @@ try:
     downloaded_models = [m.model for m in models_info.models]
     if 'mistral-nemo:latest' not in downloaded_models and 'mistral-nemo' not in downloaded_models:
         print(" Модель mistral-nemo не найдена! Начинаю скачивание...")
-        ollama.pull('mistral-nemo') # 
+        ollama.pull('mistral-nemo') #
         print(" Загрузка завершена.")
     else:
         print(" Модель готова к общению!")
@@ -129,7 +130,7 @@ while True:
     
 
 
-    if user_input.lower() in ['q', 'exit', 'выход']:
+    if user_input.lower() in ['q', 'exit', 'выход', 'выход.']:
         fileL.close()
         print("LogsClose: 'можно отправлятся на покой' ")    
         break
@@ -182,8 +183,10 @@ while True:
             model='mistral-nemo',
             messages=full_messages,
             options={
-                'temperature': 0.55,
-                'num_predict': 850,
+                'num_ctx': 2048,
+                'temperature': 0.65,
+                'num_predict': 300,
+                'repeat_penalty': 1.2,
                 'stop': ["</s>", "<|im_end|>"]
             }
         )
@@ -222,12 +225,19 @@ while True:
                 {"role": "assistant", "content": answer}
             ], 
             user_id=user_id,
-            prompt=extraction_prompt
+            prompt=extraction_prompt    
         )
+
+        if len(user_input) > 5:
+            memory.add(
+                [{"role": "user", "content": user_input}],
+                user_id=user_id
+            )
 
         # Обновляем короткую историю
         short_term_history.append({"role": "user", "content": user_input})
         short_term_history.append({"role": "assistant", "content": answer})
-
+    
     except Exception as e:
         print(f"Ошибка API: {e}")
+        

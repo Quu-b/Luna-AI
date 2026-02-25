@@ -3,15 +3,12 @@ import numpy as np
 import time
 
 
-# Настройки (твои проверенные параметры)
+# Настройки
 FS = 16000          
 BLOCK_SIZE = 1024    
 SILENCE_LIMIT = 1.5  
 THRESHOLD = 0.04    
-
-## Хотел добавить кнопку мута, но это потом
-
-muted = False
+muted = False  # Глобальная переменная для отключения микрофона
 
 def listen(stt_model):
     if muted: return None
