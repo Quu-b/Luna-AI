@@ -23,25 +23,3 @@
 - Не отвечай за пользователя и не продолжай его фразы.
 
 
-config = MemoryConfig(
-    llm={
-        "provider": "ollama",
-        "config": {
-            "model": "llama3.1:8b",
-            "ollama_base_url": "http://localhost:11434"
-        }
-    },
-    embedder={
-        "provider": "ollama",
-        "config": {
-            "model": "nomic-embed-text"
-        }
-    },
-    vector_store={
-        "provider": "chroma",
-        "config": {
-            "collection_name": "my_memories",
-            "path": "./chroma_db"
-        }
-    }
-)
