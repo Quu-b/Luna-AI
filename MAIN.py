@@ -1,9 +1,15 @@
 from mem0 import *
+print("mem1")
 from mem0.configs.base import *
+print("mem2")
 from AIVoce import *
+print("voice")
 from faster_whisper import WhisperModel
+print("faster")
 from datetime import datetime
+print("delta")
 import ollama
+print("olama")
 import locale
 
 # Установка часового пояса\языка
@@ -13,7 +19,7 @@ locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
 fileL = open("Log.txt", "a", encoding="utf-8")
 fileL.write(f"{'='*20} НОВАЯ СЕССИЯ {'='*20}\n")
 fileL.flush()
-
+print(">>> 1")
 ## Функция логирования в файл
 def log(message, role):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -25,7 +31,7 @@ def log(message, role):
 
 #Включение\Выключение микрофона для голосового ввода. Если у вас мощная видюха и вы хотите общаться голосом, то включайте, если нет, то выключайте, чтобы не нагружать систему лишними задачами.
 OnVoce = False 
-
+print(">>> 2")
 if OnVoce:
     from VoceCon import *
     print("VoceChat - Включен")
@@ -57,7 +63,7 @@ config = {
         "provider": "ollama",
         "config": {
             "model": "mistral-nemo", 
-            "ollama_base_url": "http://localhost:11434"
+            "ollama_base_url": "http://127.0.0.1:11434"
         }
     },
     "embedder": {
@@ -92,7 +98,7 @@ try:
     else:
         print(" Модель готова к общению!")
 except Exception as e:
-    print(f" Ошибка: Ollama не запущена! Сначала запусти приложение Ollama. ({e})")
+    print(f" Ошибка: ({e})")
     exit()
 
 
@@ -100,7 +106,6 @@ except Exception as e:
 
 
 
-#системный промт, в целом можно и без его, но если вы хотите не просто ии помошника а полноценную личность, то желательно прописать как можно дитальнее
 with open("system_promt.txt", "r", encoding="utf-8") as f:
     sys_prompt = f.read()
 
@@ -109,7 +114,7 @@ short_term_history = []
 
 
 
-user_id = "User0" # mem-zero использует SQ-lite, по этому чтобы нейоросеть что-то забыла, достаточно сменить пользователя
+user_id = "User 1" # mem-zero использует SQ-lite, по этому чтобы нейоросеть что-то забыла, достаточно сменить пользователя
 
 
 ########################################## соновной цикл ############################################################

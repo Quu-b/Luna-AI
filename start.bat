@@ -30,7 +30,7 @@ if %errorlevel% neq 0 (
 
 echo Загружаем/Обновляем модель "Mistral-NEMO"...
 ollama pull mistral-nemo
-timeout /t 3 /nobreak
+
 cls
 
 echo Запуск скрипта пайтон. 
@@ -51,21 +51,12 @@ python -m pip install torch torchvision torchaudio --index-url https://download.
 python -m pip install -r requirements.txt
 
 
-timeout /t 10 /nobreak
+
 cls
 echo При вылите Ошибка API:  (status code: 502), нужно перезапустить скрипт, и подольше подождать, на моем железе это происходит быстро, но на слабых неизвестно.
 timeout /t 10 /nobreak
 call .venv\Scripts\activate
 python main.py
 
-:: Закрываем программу
-echo.
-echo Завершаем работу Ollama и скрипта...
-taskkill /f /im "ollama app.exe"
-taskkill /f /im "ollama.exe"
-
-echo.
-echo Redy! Все закрыто, можно отдыхать ^_^
 pause
 
-:: Очень надеюсь что скрипт работает именно так, как я задумывал. (извините за неочень хорошую громатику, у меня по русскому 3 всегда было(  ))
