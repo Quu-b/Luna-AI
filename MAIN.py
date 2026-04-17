@@ -1,15 +1,12 @@
-from mem0 import *
-print("mem1")
-from mem0.configs.base import *
-print("mem2")
+
 from AIVoce import *
-print("voice")
+print("AIVoce loaded")
 from faster_whisper import WhisperModel
-print("faster")
+print("Faster Whisper  loaded")
 from datetime import datetime
-print("delta")
+print("datetime loaded")
 import ollama
-print("olama")
+print("ollama loaded")
 import locale
 
 # Установка часового пояса\языка
@@ -30,8 +27,8 @@ def log(message, role):
 
 
 #Включение\Выключение микрофона для голосового ввода. Если у вас мощная видюха и вы хотите общаться голосом, то включайте, если нет, то выключайте, чтобы не нагружать систему лишними задачами.
-OnVoce = False 
-print(">>> 2")
+OnVoce = True 
+
 if OnVoce:
     from VoceCon import *
     print("VoceChat - Включен")
@@ -57,6 +54,12 @@ print("Голосовая модель загружена!")
 
 ######################## Регистрация  и Настройка нейросетей ###############################################
 
+print("mem-zero load...")
+from mem0 import *
+print("mem-zero loaded")
+from mem0.configs.base import *
+print("mem-zero config loaded")
+
 # конфигурация mem-zero 
 config = {
     "llm": {
@@ -78,10 +81,12 @@ config = {
             "collection_name": "neyro_memory",
             "path": "./chroma_db"
         }
-    }
+    },
+    "version": "v1.1"
 }
 
 memory = Memory.from_config(config)
+memory.api_version = 'v1.1'
 
 
 print("Проверка связи с Ollama...")
@@ -114,7 +119,7 @@ short_term_history = []
 
 
 
-user_id = "User 1" # mem-zero использует SQ-lite, по этому чтобы нейоросеть что-то забыла, достаточно сменить пользователя
+user_id = "User" # mem-zero использует SQ-lite, по этому чтобы нейоросеть что-то забыла, достаточно сменить пользователя
 
 
 ########################################## соновной цикл ############################################################
@@ -147,16 +152,10 @@ while True:
     # --- ПОИСК В ДОЛГОСРОЧНОЙ ПАМЯТИ ---
     # Ищем только 3 самых подходящих факта, а не всё подряд
 
-
-
     relevant_memories = memory.search(user_input, user_id=user_id, limit=3)
 
     # Вытаскиваем только текст воспоминаний
-    context_str = ""
-    if isinstance(relevant_memories, list):
-        context_str = "\n".join([m['memory'] for m in relevant_memories if 'memory' in m])
-    elif isinstance(relevant_memories, dict) and 'results' in relevant_memories:
-        context_str = "\n".join([m['memory'] for m in relevant_memories['results']])
+    context_str = "\n".join([m['memory'] for m in relevant_memories.get('results', [])])
 
     print(f"DEBUG: Вспомнила факты: {context_str}")
 
@@ -212,16 +211,18 @@ while True:
 
 
         # --- СОХРАНЕНИЕ В MEM-зеро ---
-        # Mem0 сама выцепит факты из вашего диалога
+        # Mem0 сама выцепит факты из диалога
         current_time_str = datetime.now().strftime("%A, %d.%m.%Y %H:%M")
 
         extraction_prompt = (
             f"Сегодня: {current_time_str}. Извлеки ФАКТЫ о пользователе. "
+            "Записывай факты ТОЛЬКО на русском языке. "
             "Игнорируй приветствия и общие вопросы. "
             "Записывай только конкретику: Имя, увлечения, предпочтения, важные события. "
             "Пример: '(23.02.2026) Имя пользователя: Админ'. Не обязательно это имя "
             "Если новой важной информации нет — НИЧЕГО не пиши."
             "Когда ты запоминаешь факты, ОБЯЗАТЕЛЬНО записывай владельца этой фразы"
+            
         )
 
         memory.add(
@@ -233,11 +234,7 @@ while True:
             prompt=extraction_prompt    
         )
 
-        if len(user_input) > 5:
-            memory.add(
-                [{"role": "user", "content": user_input}],
-                user_id=user_id
-            )
+
 
         # Обновляем короткую историю
         short_term_history.append({"role": "user", "content": user_input})
